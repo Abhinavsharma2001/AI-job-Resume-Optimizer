@@ -1,36 +1,65 @@
-import Navbar from "./component/Navbar"
-import Hero from "./component/Hero"
-import HomeCards from "./component/HomeCards"
-import JobListings from "./component/JobListings"
-import LiveJobListings from "./component/LiveJobListings"
-import UseState from "./ReactHooks/UseState"
-import ChatBot from "./component/ChatBot"
-import JobResumeBuilder from "./component/JobResumeBuilder"
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { AuthProvider } from './context/AuthContext';
+import Header from './component/Header';
+import Footer from './component/Footer';
+import ChatBot from './component/ChatBot';
+
+// Pages
+import HomePage from './pages/HomePage';
+import LoginPage from './pages/LoginPage';
+import SignupPage from './pages/SignupPage';
+import ResumeBuilderPage from './pages/ResumeBuilderPage';
+import ResumeAnalyzerPage from './pages/ResumeAnalyzerPage';
+import JobsPage from './pages/JobsPage';
+import ChatbotPage from './pages/ChatbotPage';
 
 export default function App() {
   return (
-    <>
-      <Navbar />
-      <Hero />
+    <AuthProvider>
+      <Router>
+        <div className="min-h-screen flex flex-col">
+          {/* Header - shown on all pages except auth pages */}
+          <Routes>
+            <Route path="/login" element={null} />
+            <Route path="/signup" element={null} />
+            <Route path="*" element={<Header />} />
+          </Routes>
 
-      <HomeCards />
-      <JobListings />
-      <LiveJobListings />
+          {/* Main Content */}
+          <div className="flex-1">
+            <Routes>
+              {/* Home */}
+              <Route path="/" element={<HomePage />} />
 
-      {/* Job-First Resume Builder Section */}
-      <JobResumeBuilder />
+              {/* Auth Pages */}
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/signup" element={<SignupPage />} />
 
-      <UseState />
+              {/* Feature Pages */}
+              <Route path="/resume-builder" element={<ResumeBuilderPage />} />
+              <Route path="/resume-analyzer" element={<ResumeAnalyzerPage />} />
+              <Route path="/jobs" element={<JobsPage />} />
+              <Route path="/chatbot" element={<ChatbotPage />} />
+            </Routes>
+          </div>
 
-      <section className="m-auto max-w-lg my-10 px-6">
-        <a
-          href="jobs.html"
-          className="block bg-black text-white text-center py-4 px-6 rounded-xl hover:bg-gray-700"
-        >View All Jobs</a>
-      </section>
+          {/* Footer - shown on all pages except auth pages and chatbot */}
+          <Routes>
+            <Route path="/login" element={null} />
+            <Route path="/signup" element={null} />
+            <Route path="/chatbot" element={null} />
+            <Route path="*" element={<Footer />} />
+          </Routes>
 
-      {/* AI Chatbot - Fixed position on right side */}
-      <ChatBot />
-    </>
-  )
+          {/* Floating Chatbot - shown on all pages except dedicated chatbot page */}
+          <Routes>
+            <Route path="/chatbot" element={null} />
+            <Route path="/login" element={null} />
+            <Route path="/signup" element={null} />
+            <Route path="*" element={<ChatBot />} />
+          </Routes>
+        </div>
+      </Router>
+    </AuthProvider>
+  );
 }
