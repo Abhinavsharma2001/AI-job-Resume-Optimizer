@@ -1,4 +1,8 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
+import * as pdfjsLib from 'pdfjs-dist';
+
+// Set up PDF.js worker
+pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
 /**
  * ===============================================
@@ -50,6 +54,7 @@ const ResumeAnalyzer = ({ onExtractedData, formData }) => {
     const [showAnalysis, setShowAnalysis] = useState(false);
     const [targetRole, setTargetRole] = useState('');
     const [extractedData, setExtractedData] = useState(null);
+    const [extractionStatus, setExtractionStatus] = useState('');
 
     // Extract structured data from resume text
     const extractResumeData = (text) => {
@@ -73,64 +78,102 @@ const ResumeAnalyzer = ({ onExtractedData, formData }) => {
         const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
 
         // Extract Name (usually first line or line before email)
-        const nameMatch = text.match(/^([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/m);
-        if (nameMatch) data.fullName = nameMatch[1];
+        // Look for a name pattern at the start
+        for (let i = 0; i < Math.min(5, lines.length); i++) {
+            const line = lines[i];
+            // Name is typically capitalized words without numbers or special chars
+            if (/^[A-Z][a-z]+(\s+[A-Z][a-z]+)+$/.test(line) && line.length < 50) {
+                data.fullName = line;
+                break;
+            }
+        }
+
+        // If no name found, try first line as fallback
+        if (!data.fullName && lines.length > 0) {
+            const firstLine = lines[0];
+            if (firstLine.length < 50 && /^[A-Za-z\s]+$/.test(firstLine)) {
+                data.fullName = firstLine;
+            }
+        }
 
         // Extract Email
         const emailMatch = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
         if (emailMatch) data.email = emailMatch[0];
 
-        // Extract Phone
-        const phoneMatch = text.match(/(\+\d{1,3}[-.\s]?)?(\(?\d{3}\)?[-.\s]?)?\d{3,4}[-.\s]?\d{4}/);
-        if (phoneMatch) data.phone = phoneMatch[0];
+        // Extract Phone - more comprehensive pattern
+        const phonePatterns = [
+            /(\+91[\s-]?)?[6-9]\d{9}/,           // Indian mobile
+            /(\+91[\s-]?)?\d{10}/,                // 10 digit
+            /(\+\d{1,3}[\s-]?)?\(?\d{3}\)?[\s-]?\d{3}[\s-]?\d{4}/, // US/International
+            /\d{5}[\s-]?\d{5}/                    // Alternative format
+        ];
+        for (const pattern of phonePatterns) {
+            const match = text.match(pattern);
+            if (match) {
+                data.phone = match[0].replace(/\s+/g, ' ').trim();
+                break;
+            }
+        }
 
         // Extract LinkedIn
-        const linkedinMatch = text.match(/linkedin\.com\/in\/[\w-]+/i);
-        if (linkedinMatch) data.linkedin = 'https://' + linkedinMatch[0];
+        const linkedinMatch = text.match(/(?:linkedin\.com\/in\/|linkedin:\s*)([a-zA-Z0-9_-]+)/i);
+        if (linkedinMatch) data.linkedin = 'https://linkedin.com/in/' + linkedinMatch[1];
 
         // Extract GitHub
-        const githubMatch = text.match(/github\.com\/[\w-]+/i);
-        if (githubMatch) data.github = 'https://' + githubMatch[0];
+        const githubMatch = text.match(/(?:github\.com\/|github:\s*)([a-zA-Z0-9_-]+)/i);
+        if (githubMatch) data.github = 'https://github.com/' + githubMatch[1];
 
-        // Extract Skills
-        const skillsSection = text.match(/(?:skills|technologies|tech\s*stack)[:\s]*([^\n]+(?:\n(?![A-Z][a-z]+:)[^\n]+)*)/i);
-        if (skillsSection) {
-            const skillsText = skillsSection[1];
-            // Common technical skills to look for
-            const techKeywords = ['JavaScript', 'Python', 'Java', 'React', 'Node.js', 'HTML', 'CSS', 'SQL', 'MongoDB',
-                'TypeScript', 'Angular', 'Vue', 'Express', 'Django', 'Flask', 'AWS', 'Docker', 'Git', 'C++', 'C#',
-                'Ruby', 'PHP', 'Swift', 'Kotlin', 'Flutter', 'React Native', 'PostgreSQL', 'MySQL', 'Redis',
-                'GraphQL', 'REST API', 'Redux', 'Next.js', 'Tailwind', 'Bootstrap', 'Firebase', 'Kubernetes'];
+        // Extract Skills - comprehensive list
+        const techKeywords = [
+            'JavaScript', 'Python', 'Java', 'React', 'Node.js', 'HTML', 'CSS', 'SQL', 'MongoDB',
+            'TypeScript', 'Angular', 'Vue', 'Express', 'Django', 'Flask', 'AWS', 'Docker', 'Git',
+            'C++', 'C#', 'Ruby', 'PHP', 'Swift', 'Kotlin', 'Flutter', 'React Native', 'PostgreSQL',
+            'MySQL', 'Redis', 'GraphQL', 'REST API', 'Redux', 'Next.js', 'Tailwind', 'Bootstrap',
+            'Firebase', 'Kubernetes', 'Jenkins', 'Linux', 'Azure', 'GCP', 'Terraform', 'Ansible',
+            'Machine Learning', 'Deep Learning', 'TensorFlow', 'PyTorch', 'Pandas', 'NumPy',
+            'Scikit-learn', 'NLP', 'Computer Vision', 'Data Science', 'Excel', 'Tableau', 'Power BI',
+            'Selenium', 'Jest', 'Cypress', 'JIRA', 'Figma', 'Photoshop', 'Illustrator',
+            'Spring Boot', 'Hibernate', '.NET', 'Laravel', 'Rails', 'FastAPI', 'Svelte',
+            'Webpack', 'Vite', 'Babel', 'SASS', 'LESS', 'Material UI', 'Chakra UI'
+        ];
 
-            const foundSkills = techKeywords.filter(skill =>
-                text.toLowerCase().includes(skill.toLowerCase())
-            );
-            data.technicalSkills = foundSkills.join(', ');
+        const foundSkills = techKeywords.filter(skill =>
+            text.toLowerCase().includes(skill.toLowerCase())
+        );
+        data.technicalSkills = foundSkills.join(', ');
+
+        // Extract Summary/Objective
+        const summaryPatterns = [
+            /(?:summary|objective|about\s*me|profile|career\s*objective)[:\s]*\n?([^\n]+(?:\n(?![A-Z][a-z]+:|\n)[^\n]+){0,5})/i,
+            /(?:^|\n)([A-Z][^.]+(?:seeking|passionate|experienced|skilled|dedicated)[^.]+\.)/i
+        ];
+        for (const pattern of summaryPatterns) {
+            const match = text.match(pattern);
+            if (match) {
+                data.summary = match[1].trim().substring(0, 500);
+                break;
+            }
         }
 
         // Extract Projects
-        const projectsSection = text.match(/(?:projects|portfolio)[:\s]*\n?([\s\S]*?)(?=(?:experience|education|skills|achievements|certifications|\n\n[A-Z])|$)/i);
+        const projectsSection = text.match(/(?:projects?|portfolio)[:\s]*\n?([\s\S]*?)(?=(?:\n\s*(?:experience|education|skills|achievements|certifications|work)\s*:?)|$)/i);
         if (projectsSection) {
             const projectText = projectsSection[1];
-            // Try to parse individual projects
-            const projectBlocks = projectText.split(/\n(?=[A-Z•\-\d])/);
+            const projectBlocks = projectText.split(/\n(?=[•\-\*\d]|[A-Z][a-z]+\s*[-–:])/);
 
             projectBlocks.forEach(block => {
                 if (block.trim().length > 20) {
                     const lines = block.split('\n').filter(l => l.trim());
                     if (lines.length > 0) {
-                        const projectName = lines[0].replace(/^[•\-\*\d.)\s]+/, '').split(/[:\-–]/)[0].trim();
+                        const projectName = lines[0].replace(/^[•\-\*\d.)\s]+/, '').split(/[:\-–|]/)[0].trim();
                         const description = lines.slice(1).join(' ').trim();
 
-                        // Extract technologies from project description
-                        const techKeywords = ['JavaScript', 'Python', 'React', 'Node.js', 'HTML', 'CSS', 'MongoDB',
-                            'Express', 'Django', 'Flask', 'AWS', 'Docker', 'Firebase', 'TypeScript', 'Vue', 'Angular'];
                         const foundTech = techKeywords.filter(t => block.toLowerCase().includes(t.toLowerCase()));
 
                         if (projectName && projectName.length > 2 && projectName.length < 100) {
                             data.projects.push({
-                                name: projectName.substring(0, 50),
-                                description: description.substring(0, 300),
+                                name: projectName.substring(0, 80),
+                                description: description.substring(0, 400),
                                 technologies: foundTech.join(', '),
                                 link: '',
                                 impact: ''
@@ -141,37 +184,32 @@ const ResumeAnalyzer = ({ onExtractedData, formData }) => {
             });
         }
 
-        // If no projects found, try alternative pattern
-        if (data.projects.length === 0) {
-            const projectPatterns = text.match(/(?:•|\-|\*|\d\.)\s*([^•\-\*\n]+(?:using|built with|developed|created)[^•\-\*\n]+)/gi);
-            if (projectPatterns) {
-                projectPatterns.slice(0, 3).forEach(match => {
-                    const techKeywords = ['JavaScript', 'Python', 'React', 'Node.js', 'HTML', 'CSS', 'MongoDB'];
-                    const foundTech = techKeywords.filter(t => match.toLowerCase().includes(t.toLowerCase()));
-                    data.projects.push({
-                        name: match.substring(0, 50).replace(/^[•\-\*\d.\s]+/, ''),
-                        description: match,
-                        technologies: foundTech.join(', '),
-                        link: '',
-                        impact: ''
-                    });
-                });
-            }
-        }
-
         // Extract Education
-        const eduSection = text.match(/(?:education|academic)[:\s]*\n?([\s\S]*?)(?=(?:experience|projects|skills|achievements|\n\n[A-Z])|$)/i);
+        const eduSection = text.match(/(?:education|academic|qualification)[:\s]*\n?([\s\S]*?)(?=(?:\n\s*(?:experience|projects|skills|work)\s*:?)|$)/i);
         if (eduSection) {
             const eduText = eduSection[1];
-            const degreeMatch = eduText.match(/(B\.?Tech|B\.?E|B\.?Sc|B\.?A|M\.?Tech|M\.?S|M\.?Sc|M\.?B\.?A|Ph\.?D|Bachelor|Master|Diploma)[^,\n]*/gi);
-            const univMatch = eduText.match(/(?:university|college|institute|school)[^,\n]+/gi);
+
+            // Look for degree patterns
+            const degreePatterns = [
+                /(B\.?Tech|B\.?E|B\.?Sc|B\.?A|B\.?Com|BCA|BBA|M\.?Tech|M\.?S|M\.?Sc|M\.?A|M\.?Com|MCA|MBA|Ph\.?D|Bachelor|Master|Diploma)[^\n]*/gi,
+            ];
+
+            const degrees = [];
+            for (const pattern of degreePatterns) {
+                const matches = eduText.match(pattern);
+                if (matches) {
+                    matches.forEach(m => degrees.push(m));
+                }
+            }
+
+            const univMatch = eduText.match(/(?:university|college|institute|school|academy)[^\n,]*/gi);
             const yearMatch = eduText.match(/20\d{2}/g);
 
-            if (degreeMatch || univMatch) {
+            if (degrees.length > 0 || univMatch) {
                 data.education.push({
-                    degree: degreeMatch ? degreeMatch[0] : '',
+                    degree: degrees[0] || '',
                     field: '',
-                    university: univMatch ? univMatch[0].replace(/university|college|institute|school/gi, '').trim() : '',
+                    university: univMatch ? univMatch[0].replace(/university|college|institute|school|academy/gi, '').trim() : '',
                     graduationYear: yearMatch ? yearMatch[yearMatch.length - 1] : '',
                     gpa: '',
                     coursework: ''
@@ -180,24 +218,24 @@ const ResumeAnalyzer = ({ onExtractedData, formData }) => {
         }
 
         // Extract Experience
-        const expSection = text.match(/(?:experience|work\s*history|employment)[:\s]*\n?([\s\S]*?)(?=(?:education|projects|skills|achievements|\n\n[A-Z])|$)/i);
+        const expSection = text.match(/(?:experience|work\s*history|employment|professional\s*experience)[:\s]*\n?([\s\S]*?)(?=(?:\n\s*(?:education|projects|skills|achievements)\s*:?)|$)/i);
         if (expSection) {
             const expText = expSection[1];
-            const expBlocks = expText.split(/\n(?=[A-Z])/);
+            const expBlocks = expText.split(/\n(?=[A-Z][a-z]+\s+(?:at|@|-|–|\|)|[•\-\*])/);
 
             expBlocks.forEach(block => {
                 if (block.trim().length > 30) {
                     const lines = block.split('\n').filter(l => l.trim());
-                    const roleMatch = block.match(/(intern|developer|engineer|analyst|designer|manager|associate|executive|specialist)/i);
-                    const companyMatch = block.match(/(?:at|@)\s*([A-Z][^\n,]+)/i);
-                    const dateMatch = block.match(/(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s*20\d{2}\s*[-–]\s*(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|present|current)[a-z]*\s*20\d{0,2}/gi);
+                    const roleMatch = block.match(/(intern|developer|engineer|analyst|designer|manager|associate|executive|specialist|architect|lead|senior|junior|consultant|administrator)/i);
+                    const companyMatch = block.match(/(?:at|@|[-–|])\s*([A-Z][^\n,|]+)/i);
+                    const dateMatch = block.match(/(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*[\s,]+20\d{2}\s*[-–to]+\s*(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|present|current)[a-z]*[\s,]*20\d{0,2}/gi);
 
                     if (roleMatch || lines.length > 0) {
                         data.experience.push({
-                            company: companyMatch ? companyMatch[1].trim() : lines[0].substring(0, 50),
+                            company: companyMatch ? companyMatch[1].trim() : lines[0]?.substring(0, 50) || '',
                             role: roleMatch ? roleMatch[0] : '',
                             duration: dateMatch ? dateMatch[0] : '',
-                            description: lines.slice(1, 3).join(' ').substring(0, 200),
+                            description: lines.slice(1, 4).join(' ').substring(0, 300),
                             achievements: ''
                         });
                     }
@@ -205,19 +243,13 @@ const ResumeAnalyzer = ({ onExtractedData, formData }) => {
             });
         }
 
-        // Extract Summary/Objective
-        const summaryMatch = text.match(/(?:summary|objective|about|profile)[:\s]*\n?([^\n]+(?:\n(?![A-Z][a-z]+:)[^\n]+){0,3})/i);
-        if (summaryMatch) {
-            data.summary = summaryMatch[1].trim().substring(0, 500);
-        }
-
         // Extract Certifications
-        const certMatch = text.match(/(?:certifications?|certificates?)[:\s]*\n?([^\n]+(?:\n(?![A-Z][a-z]+:)[^\n]+)*)/i);
+        const certMatch = text.match(/(?:certifications?|certificates?|credentials?)[:\s]*\n?([^\n]+(?:\n(?![A-Z][a-z]+:)[^\n]+)*)/i);
         if (certMatch) {
-            data.certifications = certMatch[1].trim().substring(0, 300);
+            data.certifications = certMatch[1].trim().substring(0, 400);
         }
 
-        // Ensure at least one project/experience entry
+        // Ensure at least one entry for each
         if (data.projects.length === 0) {
             data.projects.push({ name: '', description: '', technologies: '', link: '', impact: '' });
         }
@@ -263,6 +295,63 @@ const ResumeAnalyzer = ({ onExtractedData, formData }) => {
         { title: 'Python Developer', company: 'PyTech', skills: ['Python', 'Django', 'PostgreSQL'], salary: '₹10-18 LPA', match: 0 },
     ];
 
+    // Proper PDF text extraction using pdf.js
+    const extractPDFText = async (file) => {
+        return new Promise(async (resolve, reject) => {
+            try {
+                setExtractionStatus('Reading PDF file...');
+                const arrayBuffer = await file.arrayBuffer();
+
+                setExtractionStatus('Parsing PDF content...');
+                const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+                let fullText = '';
+                const numPages = pdf.numPages;
+
+                setExtractionStatus(`Extracting text from ${numPages} page(s)...`);
+
+                for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+                    const page = await pdf.getPage(pageNum);
+                    const textContent = await page.getTextContent();
+
+                    // Extract text items and join them
+                    const pageText = textContent.items
+                        .map(item => {
+                            // item.str contains the text
+                            // item.transform[4] is x position, item.transform[5] is y position
+                            return item.str;
+                        })
+                        .join(' ');
+
+                    fullText += pageText + '\n';
+                    setExtractionStatus(`Extracting page ${pageNum} of ${numPages}...`);
+                }
+
+                // Clean up the extracted text
+                fullText = fullText
+                    .replace(/\s+/g, ' ')           // Normalize whitespace
+                    .replace(/\n+/g, '\n')          // Normalize newlines
+                    .replace(/([a-z])([A-Z])/g, '$1 $2')  // Add space between camelCase
+                    .trim();
+
+                // Try to restore structure by detecting sections
+                const sections = ['Summary', 'Objective', 'Experience', 'Education', 'Skills', 'Projects', 'Certifications'];
+                sections.forEach(section => {
+                    const regex = new RegExp(`(${section})`, 'gi');
+                    fullText = fullText.replace(regex, '\n\n$1\n');
+                });
+
+                setExtractionStatus('Text extraction complete!');
+                console.log('Extracted PDF text:', fullText.substring(0, 500) + '...');
+                resolve(fullText);
+            } catch (error) {
+                console.error('PDF extraction error:', error);
+                setExtractionStatus('Error extracting PDF. Try pasting text instead.');
+                reject(error);
+            }
+        });
+    };
+
     // Handle file upload
     const handleFileUpload = useCallback(async (event) => {
         const file = event.target.files[0];
@@ -270,44 +359,40 @@ const ResumeAnalyzer = ({ onExtractedData, formData }) => {
 
         setUploadedFile(file);
         setIsAnalyzing(true);
+        setExtractionStatus('Starting file processing...');
 
         try {
             let text = '';
 
             if (file.type === 'text/plain') {
-                // Handle TXT files
+                setExtractionStatus('Reading text file...');
                 text = await file.text();
             } else if (file.type === 'application/pdf') {
-                // For PDF - we'll extract basic text (in production, use pdf.js)
                 text = await extractPDFText(file);
+            } else if (file.name.endsWith('.docx') || file.name.endsWith('.doc')) {
+                setExtractionStatus('DOCX files require paste. Please paste your resume text below.');
+                setIsAnalyzing(false);
+                return;
             } else {
-                // For other formats, try to read as text
+                // Try to read as text
                 text = await file.text();
             }
 
+            if (text.trim().length < 50) {
+                setExtractionStatus('Could not extract enough text. Please paste your resume content below.');
+                setIsAnalyzing(false);
+                return;
+            }
+
             setExtractedText(text);
+            setExtractionStatus('Analyzing resume content...');
             analyzeResume(text);
         } catch (error) {
             console.error('Error reading file:', error);
+            setExtractionStatus('Error reading file. Please try pasting your resume text instead.');
             setIsAnalyzing(false);
         }
     }, [targetRole]);
-
-    // Simulate PDF text extraction (in production, use pdf.js library)
-    const extractPDFText = async (file) => {
-        // Since we can't use pdf.js without installation, we'll prompt user to paste text
-        // In a real app, you'd use: const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
-        return new Promise((resolve) => {
-            const reader = new FileReader();
-            reader.onload = () => {
-                // Try to extract readable text from PDF binary
-                const text = reader.result;
-                // Basic extraction - in production use proper PDF parser
-                resolve(text.replace(/[^\x20-\x7E\n]/g, ' ').replace(/\s+/g, ' '));
-            };
-            reader.readAsText(file);
-        });
-    };
 
     // Calculate ATS Score
     const calculateATSScore = (text, isImproved = false) => {
@@ -360,7 +445,7 @@ const ResumeAnalyzer = ({ onExtractedData, formData }) => {
 
         // 5. Contact Information (15 points)
         const hasEmail = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/.test(text);
-        const hasPhone = /(\+\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/.test(text);
+        const hasPhone = /(\+\d{1,3}[\s-]?)?\(?\d{3}\)?[\s-]?\d{3}[\s-]?\d{4}|[6-9]\d{9}/.test(text);
         const hasLinkedIn = /linkedin/i.test(text);
         const hasGitHub = /github/i.test(text);
         let contactScore = 0;
@@ -484,6 +569,11 @@ const ResumeAnalyzer = ({ onExtractedData, formData }) => {
             resumeData.targetRole = targetRole;
             setExtractedData(resumeData);
 
+            // Pass extracted data to parent component if callback exists
+            if (onExtractedData) {
+                onExtractedData(resumeData);
+            }
+
             // Calculate initial ATS score
             const initialResult = calculateATSScore(text);
             setAtsScore(initialResult);
@@ -508,7 +598,8 @@ const ResumeAnalyzer = ({ onExtractedData, formData }) => {
 
             setShowAnalysis(true);
             setIsAnalyzing(false);
-        }, 2000); // Simulate analysis time
+            setExtractionStatus('');
+        }, 1500);
     };
 
     // Get score color
@@ -533,6 +624,18 @@ const ResumeAnalyzer = ({ onExtractedData, formData }) => {
         return 'Needs Work';
     };
 
+    const resetAnalysis = () => {
+        setShowAnalysis(false);
+        setExtractedText('');
+        setUploadedFile(null);
+        setAtsScore(null);
+        setImprovedScore(null);
+        setSuggestions([]);
+        setRelevantJobs([]);
+        setExtractedData(null);
+        setExtractionStatus('');
+    };
+
     return (
         <div className="bg-white/5 backdrop-blur-md rounded-2xl p-6 border border-white/10 mb-8">
             {/* Header */}
@@ -550,7 +653,7 @@ const ResumeAnalyzer = ({ onExtractedData, formData }) => {
                 <div className="space-y-4">
                     {/* Target Role Input */}
                     <div>
-                        <label className="text-purple-300 text-sm mb-2 block">Target Job Role</label>
+                        <label className="text-purple-300 text-sm mb-2 block">Target Job Role *</label>
                         <input
                             type="text"
                             placeholder="e.g., Frontend Developer, Data Analyst, DevOps Engineer"
@@ -572,9 +675,9 @@ const ResumeAnalyzer = ({ onExtractedData, formData }) => {
                         <label htmlFor="resume-upload" className="cursor-pointer">
                             <div className="text-4xl mb-3">📤</div>
                             <p className="text-white font-medium mb-2">
-                                {isAnalyzing ? 'Analyzing your resume...' : 'Drop your resume here or click to upload'}
+                                {isAnalyzing ? extractionStatus || 'Analyzing your resume...' : 'Drop your resume here or click to upload'}
                             </p>
-                            <p className="text-gray-400 text-sm">Supports PDF, TXT, DOC, DOCX</p>
+                            <p className="text-gray-400 text-sm">Supports PDF, TXT files (DOCX requires paste)</p>
                             {uploadedFile && (
                                 <p className="text-purple-300 mt-2">📎 {uploadedFile.name}</p>
                             )}
@@ -582,30 +685,38 @@ const ResumeAnalyzer = ({ onExtractedData, formData }) => {
                         {isAnalyzing && (
                             <div className="mt-4">
                                 <div className="animate-spin inline-block w-8 h-8 border-4 border-purple-500 border-t-transparent rounded-full"></div>
-                                <p className="text-purple-300 mt-2">Analyzing with AI...</p>
+                                <p className="text-purple-300 mt-2">{extractionStatus}</p>
                             </div>
                         )}
                     </div>
 
                     {/* Or paste text */}
-                    <div className="text-center text-gray-400">— OR —</div>
+                    <div className="text-center text-gray-400">— OR PASTE YOUR RESUME TEXT —</div>
                     <textarea
-                        placeholder="Paste your resume text here..."
+                        placeholder="Paste your resume text here for best results..."
                         value={extractedText}
                         onChange={(e) => setExtractedText(e.target.value)}
-                        rows={6}
-                        className="w-full px-4 py-3 rounded-xl bg-white/10 border border-white/20 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        rows={8}
+                        className="w-full px-4 py-3 rounded-xl bg-white/10 border border-white/20 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 font-mono text-sm"
                     />
                     <button
                         onClick={() => analyzeResume(extractedText)}
                         disabled={!extractedText.trim() || !targetRole.trim() || isAnalyzing}
-                        className="w-full py-3 bg-gradient-to-r from-purple-500 to-pink-600 text-white font-bold rounded-xl hover:from-purple-600 hover:to-pink-700 transition-all disabled:opacity-50"
+                        className="w-full py-3 bg-gradient-to-r from-purple-500 to-pink-600 text-white font-bold rounded-xl hover:from-purple-600 hover:to-pink-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         🔍 Analyze Resume
                     </button>
                 </div>
             ) : (
                 <div className="space-y-6">
+                    {/* Reset Button */}
+                    <button
+                        onClick={resetAnalysis}
+                        className="text-purple-300 hover:text-white text-sm flex items-center gap-2"
+                    >
+                        ← Analyze Another Resume
+                    </button>
+
                     {/* Score Comparison */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {/* Current Score */}
@@ -663,6 +774,101 @@ const ResumeAnalyzer = ({ onExtractedData, formData }) => {
                             ))}
                         </div>
                     </div>
+
+                    {/* Extracted Data Preview */}
+                    {extractedData && (
+                        <div className="bg-white/5 rounded-xl p-4 border border-emerald-500/30">
+                            <h4 className="text-white font-semibold mb-3">📋 Extracted from Your Resume</h4>
+
+                            {/* Contact Info */}
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
+                                {extractedData.fullName && (
+                                    <div className="bg-white/5 p-2 rounded">
+                                        <span className="text-gray-400 text-xs">Name</span>
+                                        <p className="text-white text-sm font-medium">{extractedData.fullName}</p>
+                                    </div>
+                                )}
+                                {extractedData.email && (
+                                    <div className="bg-white/5 p-2 rounded">
+                                        <span className="text-gray-400 text-xs">Email</span>
+                                        <p className="text-white text-sm truncate">{extractedData.email}</p>
+                                    </div>
+                                )}
+                                {extractedData.phone && (
+                                    <div className="bg-white/5 p-2 rounded">
+                                        <span className="text-gray-400 text-xs">Phone</span>
+                                        <p className="text-white text-sm">{extractedData.phone}</p>
+                                    </div>
+                                )}
+                                {extractedData.technicalSkills && (
+                                    <div className="bg-white/5 p-2 rounded">
+                                        <span className="text-gray-400 text-xs">Skills Found</span>
+                                        <p className="text-emerald-300 text-sm font-medium">{extractedData.technicalSkills.split(',').length} skills</p>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Skills */}
+                            {extractedData.technicalSkills && (
+                                <div className="mb-4">
+                                    <span className="text-purple-300 text-sm font-medium">💼 Skills Detected:</span>
+                                    <div className="flex flex-wrap gap-2 mt-2">
+                                        {extractedData.technicalSkills.split(',').slice(0, 15).map((skill, i) => (
+                                            <span key={i} className="px-2 py-1 bg-purple-500/20 text-purple-300 text-xs rounded">
+                                                {skill.trim()}
+                                            </span>
+                                        ))}
+                                        {extractedData.technicalSkills.split(',').length > 15 && (
+                                            <span className="px-2 py-1 bg-gray-500/20 text-gray-400 text-xs rounded">
+                                                +{extractedData.technicalSkills.split(',').length - 15} more
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Experience */}
+                            {extractedData.experience.some(e => e.company || e.role) && (
+                                <div className="mb-4">
+                                    <span className="text-purple-300 text-sm font-medium">💼 Experience Detected:</span>
+                                    <div className="space-y-2 mt-2">
+                                        {extractedData.experience.filter(e => e.company || e.role).slice(0, 3).map((exp, i) => (
+                                            <div key={i} className="bg-white/5 p-2 rounded border border-white/10">
+                                                <p className="text-white text-sm font-medium">{exp.role || 'Role'} {exp.company ? `at ${exp.company}` : ''}</p>
+                                                {exp.duration && <p className="text-gray-400 text-xs">{exp.duration}</p>}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Projects */}
+                            {extractedData.projects.some(p => p.name) && (
+                                <div className="mb-4">
+                                    <span className="text-purple-300 text-sm font-medium">💻 Projects Detected ({extractedData.projects.filter(p => p.name).length}):</span>
+                                    <div className="space-y-2 mt-2">
+                                        {extractedData.projects.filter(p => p.name).slice(0, 3).map((project, i) => (
+                                            <div key={i} className="bg-white/5 p-3 rounded border border-white/10">
+                                                <p className="text-white font-medium">{project.name}</p>
+                                                {project.description && (
+                                                    <p className="text-gray-400 text-sm mt-1 line-clamp-2">{project.description}</p>
+                                                )}
+                                                {project.technologies && (
+                                                    <div className="flex flex-wrap gap-1 mt-2">
+                                                        {project.technologies.split(',').map((tech, j) => (
+                                                            <span key={j} className="px-2 py-0.5 bg-emerald-500/20 text-emerald-300 text-xs rounded">
+                                                                {tech.trim()}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
 
                     {/* Improvement Suggestions */}
                     <div className="bg-white/5 rounded-xl p-4 border border-white/10">
@@ -729,187 +935,8 @@ const ResumeAnalyzer = ({ onExtractedData, formData }) => {
                             </div>
                         </div>
                     )}
-
-                    {/* Extracted Data Preview */}
-                    {extractedData && (
-                        <div className="bg-white/5 rounded-xl p-4 border border-emerald-500/30">
-                            <h4 className="text-white font-semibold mb-3">📋 Extracted from Your Resume</h4>
-
-                            {/* Contact Info */}
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
-                                {extractedData.fullName && (
-                                    <div className="bg-white/5 p-2 rounded">
-                                        <span className="text-gray-400 text-xs">Name</span>
-                                        <p className="text-white text-sm">{extractedData.fullName}</p>
-                                    </div>
-                                )}
-                                {extractedData.email && (
-                                    <div className="bg-white/5 p-2 rounded">
-                                        <span className="text-gray-400 text-xs">Email</span>
-                                        <p className="text-white text-sm truncate">{extractedData.email}</p>
-                                    </div>
-                                )}
-                                {extractedData.phone && (
-                                    <div className="bg-white/5 p-2 rounded">
-                                        <span className="text-gray-400 text-xs">Phone</span>
-                                        <p className="text-white text-sm">{extractedData.phone}</p>
-                                    </div>
-                                )}
-                                {extractedData.technicalSkills && (
-                                    <div className="bg-white/5 p-2 rounded col-span-2 md:col-span-1">
-                                        <span className="text-gray-400 text-xs">Skills Found</span>
-                                        <p className="text-emerald-300 text-sm">{extractedData.technicalSkills.split(',').length} skills</p>
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Skills */}
-                            {extractedData.technicalSkills && (
-                                <div className="mb-4">
-                                    <span className="text-purple-300 text-sm font-medium">💼 Skills Detected:</span>
-                                    <div className="flex flex-wrap gap-2 mt-2">
-                                        {extractedData.technicalSkills.split(',').map((skill, i) => (
-                                            <span key={i} className="px-2 py-1 bg-purple-500/20 text-purple-300 text-xs rounded">
-                                                {skill.trim()}
-                                            </span>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Projects */}
-                            {extractedData.projects.some(p => p.name) && (
-                                <div className="mb-4">
-                                    <span className="text-purple-300 text-sm font-medium">💻 Projects Detected ({extractedData.projects.filter(p => p.name).length}):</span>
-                                    <div className="space-y-2 mt-2">
-                                        {extractedData.projects.filter(p => p.name).map((project, i) => (
-                                            <div key={i} className="bg-white/5 p-3 rounded border border-white/10">
-                                                <p className="text-white font-medium">{project.name}</p>
-                                                {project.description && (
-                                                    <p className="text-gray-400 text-sm mt-1 line-clamp-2">{project.description}</p>
-                                                )}
-                                                {project.technologies && (
-                                                    <div className="flex flex-wrap gap-1 mt-2">
-                                                        {project.technologies.split(',').map((tech, j) => (
-                                                            <span key={j} className="px-2 py-0.5 bg-emerald-500/20 text-emerald-300 text-xs rounded">
-                                                                {tech.trim()}
-                                                            </span>
-                                                        ))}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Experience */}
-                            {extractedData.experience.some(e => e.company || e.role) && (
-                                <div className="mb-4">
-                                    <span className="text-purple-300 text-sm font-medium">🏢 Experience Detected:</span>
-                                    <div className="space-y-2 mt-2">
-                                        {extractedData.experience.filter(e => e.company || e.role).map((exp, i) => (
-                                            <div key={i} className="bg-white/5 p-2 rounded border border-white/10">
-                                                <p className="text-white text-sm">{exp.role} {exp.company && `@ ${exp.company}`}</p>
-                                                {exp.duration && <p className="text-gray-400 text-xs">{exp.duration}</p>}
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Auto-fill button */}
-                            <button
-                                onClick={() => {
-                                    if (onExtractedData) {
-                                        onExtractedData(extractedData);
-                                    }
-                                    // Scroll to builder
-                                    setTimeout(() => {
-                                        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-                                    }, 300);
-                                }}
-                                className="w-full py-3 bg-gradient-to-r from-purple-500 to-pink-600 text-white font-bold rounded-xl hover:from-purple-600 hover:to-pink-700 transition-all flex items-center justify-center gap-2"
-                            >
-                                📝 Auto-Fill Resume Builder with This Data
-                            </button>
-                        </div>
-                    )}
-
-                    {/* Actions */}
-                    <div className="flex gap-4">
-                        <button
-                            onClick={() => {
-                                setShowAnalysis(false);
-                                setAtsScore(null);
-                                setSuggestions([]);
-                                setRelevantJobs([]);
-                                setExtractedText('');
-                                setUploadedFile(null);
-                                setExtractedData(null);
-                            }}
-                            className="flex-1 py-3 bg-white/10 text-white rounded-xl hover:bg-white/20 transition-all"
-                        >
-                            📤 Analyze Another Resume
-                        </button>
-                        <button
-                            onClick={() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })}
-                            className="flex-1 py-3 bg-gradient-to-r from-emerald-500 to-cyan-600 text-white font-bold rounded-xl hover:from-emerald-600 hover:to-cyan-700 transition-all"
-                        >
-                            ✨ Build Improved Resume
-                        </button>
-                    </div>
                 </div>
             )}
-
-            {/* Documentation Section */}
-            <div className="mt-8 pt-6 border-t border-white/10">
-                <details className="group">
-                    <summary className="text-purple-300 cursor-pointer hover:text-purple-200 flex items-center gap-2">
-                        <span>📖 How ATS Scoring Works (Documentation)</span>
-                        <span className="group-open:rotate-180 transition-transform">▼</span>
-                    </summary>
-                    <div className="mt-4 text-gray-300 text-sm space-y-4 bg-white/5 rounded-xl p-4">
-                        <div>
-                            <h5 className="text-white font-medium mb-2">What is ATS?</h5>
-                            <p>ATS (Applicant Tracking System) is software used by companies to filter resumes before human review. Up to 75% of resumes are rejected by ATS before reaching recruiters.</p>
-                        </div>
-
-                        <div>
-                            <h5 className="text-white font-medium mb-2">Scoring Algorithm</h5>
-                            <ul className="list-disc list-inside space-y-1">
-                                <li><strong>Keywords (30 pts):</strong> Technical skills matching your target role</li>
-                                <li><strong>Sections (25 pts):</strong> Summary, Experience, Education, Skills, Projects</li>
-                                <li><strong>Action Verbs (15 pts):</strong> Strong verbs like "Achieved", "Built", "Led"</li>
-                                <li><strong>Formatting (15 pts):</strong> Proper length, clean structure</li>
-                                <li><strong>Contact Info (15 pts):</strong> Email, Phone, LinkedIn, GitHub</li>
-                            </ul>
-                        </div>
-
-                        <div>
-                            <h5 className="text-white font-medium mb-2">Score Interpretation</h5>
-                            <ul className="space-y-1">
-                                <li><span className="text-emerald-400">80-100:</span> Excellent - High chance of passing ATS</li>
-                                <li><span className="text-yellow-400">60-79:</span> Good - Minor improvements recommended</li>
-                                <li><span className="text-orange-400">40-59:</span> Fair - Several improvements needed</li>
-                                <li><span className="text-red-400">0-39:</span> Needs Work - Major revisions required</li>
-                            </ul>
-                        </div>
-
-                        <div>
-                            <h5 className="text-white font-medium mb-2">Tips for Higher Score</h5>
-                            <ul className="list-disc list-inside space-y-1">
-                                <li>Use keywords from the job description</li>
-                                <li>Include all essential sections</li>
-                                <li>Start achievements with action verbs</li>
-                                <li>Keep resume to 1-2 pages</li>
-                                <li>Use simple formatting (no tables/graphics)</li>
-                                <li>Include LinkedIn and GitHub profiles</li>
-                            </ul>
-                        </div>
-                    </div>
-                </details>
-            </div>
         </div>
     );
 };
