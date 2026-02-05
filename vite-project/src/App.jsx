@@ -8,6 +8,7 @@ import ChatBot from './component/ChatBot';
 import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
+import DashboardPage from './pages/DashboardPage';
 import ResumeBuilderPage from './pages/ResumeBuilderPage';
 import ResumeAnalyzerPage from './pages/ResumeAnalyzerPage';
 import JobsPage from './pages/JobsPage';
@@ -35,6 +36,9 @@ export default function App() {
               <Route path="/login" element={<LoginPage />} />
               <Route path="/signup" element={<SignupPage />} />
 
+              {/* Dashboard */}
+              <Route path="/dashboard" element={<DashboardPage />} />
+
               {/* Feature Pages */}
               <Route path="/resume-builder" element={<ResumeBuilderPage />} />
               <Route path="/resume-analyzer" element={<ResumeAnalyzerPage />} />
@@ -48,6 +52,7 @@ export default function App() {
             <Route path="/login" element={null} />
             <Route path="/signup" element={null} />
             <Route path="/chatbot" element={null} />
+            <Route path="/dashboard" element={null} />
             <Route path="*" element={<Footer />} />
           </Routes>
 

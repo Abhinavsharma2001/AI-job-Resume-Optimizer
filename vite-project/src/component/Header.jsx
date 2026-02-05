@@ -9,7 +9,6 @@ const Header = () => {
     const { user, logout, isAuthenticated } = useAuth();
     const location = useLocation();
 
-    // Handle scroll effect
     useEffect(() => {
         const handleScroll = () => {
             setIsScrolled(window.scrollY > 20);
@@ -18,7 +17,6 @@ const Header = () => {
         return () => window.removeEventListener('scroll', handleScroll);
     }, []);
 
-    // Close mobile menu on route change
     useEffect(() => {
         setIsMobileMenuOpen(false);
     }, [location]);
@@ -43,20 +41,12 @@ const Header = () => {
             ]
         },
         { name: 'Jobs', path: '/jobs' },
-        {
-            name: 'Resources',
-            dropdown: [
-                { name: 'Career Tips', path: '#', icon: '💡' },
-                { name: 'Interview Guide', path: '#', icon: '📝' },
-                { name: 'Salary Calculator', path: '#', icon: '💰' },
-            ]
-        },
     ];
 
     return (
         <header className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${isScrolled
-                ? 'bg-white/95 backdrop-blur-md shadow-lg border-b border-gray-100'
-                : 'bg-white/80 backdrop-blur-sm'
+            ? 'bg-white/95 backdrop-blur-md shadow-lg border-b border-gray-100'
+            : 'bg-white/80 backdrop-blur-sm'
             }`}>
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                 <div className="flex items-center justify-between h-16 md:h-20">
@@ -88,11 +78,9 @@ const Header = () => {
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                                             </svg>
                                         </button>
-
-                                        {/* Dropdown Menu */}
                                         <div className={`absolute top-full left-0 mt-1 w-56 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden transition-all duration-200 ${activeDropdown === index
-                                                ? 'opacity-100 translate-y-0 pointer-events-auto'
-                                                : 'opacity-0 -translate-y-2 pointer-events-none'
+                                            ? 'opacity-100 translate-y-0 pointer-events-auto'
+                                            : 'opacity-0 -translate-y-2 pointer-events-none'
                                             }`}>
                                             <div className="py-2">
                                                 {link.dropdown.map((item, dropIndex) => (
@@ -112,8 +100,8 @@ const Header = () => {
                                     <Link
                                         to={link.path}
                                         className={`px-4 py-2 font-medium rounded-lg transition-colors ${location.pathname === link.path
-                                                ? 'text-blue-600 bg-blue-50'
-                                                : 'text-gray-700 hover:text-blue-600 hover:bg-gray-50'
+                                            ? 'text-blue-600 bg-blue-50'
+                                            : 'text-gray-700 hover:text-blue-600 hover:bg-gray-50'
                                             }`}
                                     >
                                         {link.name}
@@ -127,12 +115,19 @@ const Header = () => {
                     <div className="hidden lg:flex items-center gap-3">
                         {isAuthenticated ? (
                             <div className="flex items-center gap-3">
+                                <Link
+                                    to="/dashboard"
+                                    className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white font-medium rounded-full hover:from-purple-600 hover:to-pink-600 transition-all shadow-lg"
+                                >
+                                    <span>📊</span>
+                                    <span>Dashboard</span>
+                                </Link>
                                 <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 rounded-full">
                                     <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white text-sm font-medium">
                                         {user?.displayName?.[0]?.toUpperCase() || user?.email?.[0]?.toUpperCase() || 'U'}
                                     </div>
-                                    <span className="text-gray-700 font-medium text-sm max-w-[120px] truncate">
-                                        {user?.displayName || user?.email?.split('@')[0]}
+                                    <span className="text-gray-700 font-medium text-sm max-w-[100px] truncate">
+                                        {user?.displayName?.split(' ')[0] || user?.email?.split('@')[0]}
                                     </span>
                                 </div>
                                 <button
@@ -183,6 +178,17 @@ const Header = () => {
                 }`}>
                 <div className="max-h-[calc(100vh-4rem)] overflow-y-auto">
                     <nav className="px-4 py-4 space-y-1">
+                        {/* Dashboard Link for logged-in users */}
+                        {isAuthenticated && (
+                            <Link
+                                to="/dashboard"
+                                className="flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg mb-2"
+                            >
+                                <span className="text-xl">📊</span>
+                                <span className="font-medium">My Dashboard</span>
+                            </Link>
+                        )}
+
                         {navLinks.map((link, index) => (
                             <div key={index}>
                                 {link.dropdown ? (
@@ -205,8 +211,8 @@ const Header = () => {
                                     <Link
                                         to={link.path}
                                         className={`block px-4 py-3 rounded-lg font-medium ${location.pathname === link.path
-                                                ? 'bg-blue-50 text-blue-600'
-                                                : 'text-gray-700 hover:bg-gray-50'
+                                            ? 'bg-blue-50 text-blue-600'
+                                            : 'text-gray-700 hover:bg-gray-50'
                                             }`}
                                     >
                                         {link.name}

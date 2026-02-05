@@ -1,11 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { Link } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 const ChatbotPage = () => {
+    const { user, isAuthenticated } = useAuth();
     const [messages, setMessages] = useState([
         {
             id: 1,
             type: 'bot',
-            text: "👋 Hello! I'm your AI Career Assistant powered by Gemini. I'm here to help you with:\n\n• Job search strategies\n• Resume tips and optimization\n• Interview preparation\n• Career advice and planning\n• Salary negotiation tips\n\nHow can I help you today?",
+            text: "Hello! 👋 I'm your AI Career Assistant. I can help you with:\n\n• Resume tips and improvements\n• Interview preparation\n• Career advice\n• Job search strategies\n\nHow can I help you today?",
             timestamp: new Date()
         }
     ]);
@@ -13,6 +16,15 @@ const ChatbotPage = () => {
     const [isTyping, setIsTyping] = useState(false);
     const messagesEndRef = useRef(null);
     const inputRef = useRef(null);
+
+    const quickActions = [
+        { label: '📄 Resume Tips', prompt: 'Give me tips to improve my resume' },
+        { label: '🎤 Interview Prep', prompt: 'Help me prepare for a job interview' },
+        { label: '💼 Career Advice', prompt: 'I need career guidance' },
+        { label: '🔍 Job Search', prompt: 'How can I find better job opportunities?' },
+        { label: '💰 Salary Negotiate', prompt: 'Tips for salary negotiation' },
+        { label: '📝 Cover Letter', prompt: 'Help me write a cover letter' },
+    ];
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -22,153 +34,162 @@ const ChatbotPage = () => {
         scrollToBottom();
     }, [messages]);
 
-    useEffect(() => {
-        inputRef.current?.focus();
-    }, []);
+    const generateBotResponse = (userMessage) => {
+        const msg = userMessage.toLowerCase();
 
-    const quickPrompts = [
-        "How do I write a strong resume?",
-        "Tips for technical interviews",
-        "How to negotiate salary?",
-        "Best way to follow up after interview",
-        "How to handle job rejection?",
-        "Career change advice"
-    ];
-
-    // AI Response using Gemini API
-    const generateAIResponse = async (userMessage) => {
-        setIsTyping(true);
-
-        try {
-            const API_KEY = 'AIzaSyCegIJFu8GWIqodtgkdxBILSq12ePfNOV0';
-
-            const conversationContext = messages.slice(-6).map(msg =>
-                `${msg.type === 'user' ? 'User' : 'Assistant'}: ${msg.text}`
-            ).join('\n');
-
-            const prompt = `You are a helpful AI career assistant on JobFlow.ai, a job search platform. Help users with job searching, resume tips, interview prep, coding questions, and career advice. Be helpful, professional, and concise. Format your responses clearly with bullet points when listing multiple items.
-
-${conversationContext}
-
-User: ${userMessage}
-Assistant:`;
-
-            const response = await fetch(
-                `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`,
-                {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        contents: [{ parts: [{ text: prompt }] }],
-                        generationConfig: {
-                            temperature: 0.7,
-                            maxOutputTokens: 800
-                        }
-                    })
-                }
-            );
-
-            const data = await response.json();
-
-            if (data.candidates?.[0]?.content?.parts?.[0]?.text) {
-                return data.candidates[0].content.parts[0].text;
-            }
-
-            return "I'm here to help! Could you please rephrase your question?";
-        } catch (error) {
-            console.error('Gemini API Error:', error);
-            return "I'm having trouble connecting right now. Please try again in a moment.";
-        } finally {
-            setIsTyping(false);
+        if (msg.includes('resume') || msg.includes('cv')) {
+            return "Here are some key resume tips:\n\n✅ **Keep it concise** - Aim for 1-2 pages max\n✅ **Use action verbs** - Start bullets with 'Led', 'Developed', 'Achieved'\n✅ **Quantify achievements** - Use numbers and percentages\n✅ **Customize for each job** - Match keywords from job description\n✅ **Use our Resume Builder** - Create an ATS-friendly resume\n\nWould you like me to review your resume or help you build one?";
         }
+
+        if (msg.includes('interview')) {
+            return "Great! Here's how to prepare for interviews:\n\n🎯 **STAR Method** - Structure answers: Situation, Task, Action, Result\n🔍 **Research the company** - Know their mission, products, culture\n💪 **Practice common questions** - Tell me about yourself, strengths/weaknesses\n👔 **Prepare questions to ask** - Show genuine interest\n⏰ **Be punctual** - Arrive 10-15 minutes early\n\nWould you like me to help you with mock interview questions?";
+        }
+
+        if (msg.includes('salary') || msg.includes('negotiate')) {
+            return "Salary negotiation tips:\n\n💰 **Research market rates** - Use Glassdoor, LinkedIn Salary\n📊 **Know your worth** - List your achievements and skills\n⏰ **Wait for the offer first** - Don't discuss salary too early\n🎯 **Give a range** - Based on research, aim high but reasonable\n✨ **Consider total package** - Benefits, bonuses, equity matter too\n\nWant me to help you prepare a negotiation strategy?";
+        }
+
+        if (msg.includes('career') || msg.includes('advice') || msg.includes('guidance')) {
+            return "Let me help you with your career path:\n\n🎯 **Define your goals** - Where do you want to be in 5 years?\n📚 **Skill development** - What skills are in demand in your field?\n🌐 **Networking** - Connect with professionals on LinkedIn\n📈 **Track your growth** - Document achievements regularly\n\nTell me more about your current role and career aspirations!";
+        }
+
+        if (msg.includes('job') || msg.includes('search') || msg.includes('find')) {
+            return "Here's how to find better opportunities:\n\n🔍 **Optimize your LinkedIn** - Complete profile, relevant keywords\n📧 **Set up job alerts** - Get notified for matching positions\n🤝 **Network actively** - 70% of jobs are filled through networking\n🎯 **Target companies** - Make a list of dream companies\n📱 **Use our Jobs page** - Real-time listings from multiple sources\n\nWant me to help you refine your job search strategy?";
+        }
+
+        if (msg.includes('cover letter')) {
+            return "Cover letter essentials:\n\n📝 **Personalize it** - Address hiring manager by name\n🎯 **Match the job** - Reference specific requirements\n💪 **Show value** - Explain what you'll bring to the role\n📏 **Keep it brief** - 3-4 paragraphs max\n✨ **Strong closing** - Include a call to action\n\nWould you like help drafting a cover letter for a specific role?";
+        }
+
+        if (msg.includes('thank') || msg.includes('thanks')) {
+            return "You're welcome! 😊 I'm always here to help with your career journey. Feel free to ask anything else about job search, interviews, resumes, or career development!";
+        }
+
+        if (msg.includes('hello') || msg.includes('hi') || msg.includes('hey')) {
+            return `Hi ${user?.displayName?.split(' ')[0] || 'there'}! 👋 Great to see you! How can I assist you with your career today?`;
+        }
+
+        return "I'd be happy to help you with that! Here are some things I specialize in:\n\n• Resume building and optimization\n• Interview preparation\n• Career planning\n• Job search strategies\n• Salary negotiation\n• Cover letter writing\n\nCould you tell me more specifically what you need help with?";
     };
 
-    const handleSendMessage = async (message = inputValue) => {
+    const handleSend = async (message = inputValue) => {
         if (!message.trim()) return;
 
-        const userMsg = {
+        const userMessage = {
             id: Date.now(),
             type: 'user',
             text: message,
             timestamp: new Date()
         };
 
-        setMessages(prev => [...prev, userMsg]);
+        setMessages(prev => [...prev, userMessage]);
         setInputValue('');
+        setIsTyping(true);
 
-        const aiResponse = await generateAIResponse(message);
+        // Simulate AI thinking
+        await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000));
 
-        const botMsg = {
+        const botResponse = {
             id: Date.now() + 1,
             type: 'bot',
-            text: aiResponse,
+            text: generateBotResponse(message),
             timestamp: new Date()
         };
 
-        setMessages(prev => [...prev, botMsg]);
+        setMessages(prev => [...prev, botResponse]);
+        setIsTyping(false);
     };
 
     const handleKeyPress = (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
-            handleSendMessage();
+            handleSend();
         }
     };
 
     return (
         <main className="pt-16 md:pt-20 min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex flex-col">
-            {/* Header */}
-            <div className="bg-gradient-to-r from-purple-600 to-pink-600 py-6 px-4">
-                <div className="max-w-4xl mx-auto flex items-center gap-4">
-                    <div className="w-14 h-14 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center text-3xl">
-                        🤖
+            <div className="flex-1 flex flex-col max-w-4xl mx-auto w-full">
+                {/* Chat Header */}
+                <div className="bg-white/10 backdrop-blur-md border-b border-white/10 px-4 py-4 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center">
+                            <span className="text-xl">🤖</span>
+                        </div>
+                        <div>
+                            <h1 className="text-white font-bold">AI Career Assistant</h1>
+                            <p className="text-green-400 text-sm flex items-center gap-1">
+                                <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
+                                Online
+                            </p>
+                        </div>
                     </div>
-                    <div>
-                        <h1 className="text-2xl font-bold text-white">AI Career Assistant</h1>
-                        <p className="text-white/70 text-sm">Powered by Gemini AI • Always ready to help</p>
+                    <Link to="/" className="text-gray-400 hover:text-white transition-colors">
+                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </Link>
+                </div>
+
+                {/* Quick Actions */}
+                <div className="px-4 py-3 overflow-x-auto scrollbar-thin">
+                    <div className="flex gap-2 min-w-max">
+                        {quickActions.map((action, index) => (
+                            <button
+                                key={index}
+                                onClick={() => handleSend(action.prompt)}
+                                className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white text-sm rounded-full border border-white/20 whitespace-nowrap transition-colors"
+                            >
+                                {action.label}
+                            </button>
+                        ))}
                     </div>
                 </div>
-            </div>
 
-            {/* Chat Container */}
-            <div className="flex-1 max-w-4xl mx-auto w-full flex flex-col p-4">
                 {/* Messages */}
-                <div className="flex-1 overflow-y-auto space-y-4 pb-4 scrollbar-thin">
-                    {messages.map(msg => (
+                <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+                    {messages.map((message) => (
                         <div
-                            key={msg.id}
-                            className={`flex ${msg.type === 'user' ? 'justify-end' : 'justify-start'}`}
+                            key={message.id}
+                            className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}
                         >
-                            <div className={`max-w-[80%] md:max-w-[70%] ${msg.type === 'user'
-                                    ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-2xl rounded-tr-sm'
-                                    : 'bg-white/10 backdrop-blur-sm text-gray-200 rounded-2xl rounded-tl-sm border border-white/10'
-                                } px-5 py-3`}>
-                                {msg.type === 'bot' && (
-                                    <div className="flex items-center gap-2 mb-2 text-purple-300 text-sm font-medium">
-                                        <span>🤖</span>
-                                        <span>AI Assistant</span>
+                            <div className={`max-w-[85%] sm:max-w-[70%] ${message.type === 'user'
+                                    ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-2xl rounded-br-md'
+                                    : 'bg-white/10 backdrop-blur-md text-white rounded-2xl rounded-bl-md border border-white/10'
+                                } px-4 py-3`}>
+                                {message.type === 'bot' && (
+                                    <div className="flex items-center gap-2 mb-2 pb-2 border-b border-white/10">
+                                        <span className="text-lg">🤖</span>
+                                        <span className="text-sm font-medium text-purple-300">AI Assistant</span>
                                     </div>
                                 )}
-                                <p className="whitespace-pre-wrap leading-relaxed">{msg.text}</p>
-                                <p className={`text-xs mt-2 ${msg.type === 'user' ? 'text-white/50' : 'text-gray-500'}`}>
-                                    {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                <div className="text-sm sm:text-base whitespace-pre-wrap">
+                                    {message.text.split('\n').map((line, i) => {
+                                        // Handle bold text
+                                        const parts = line.split(/\*\*(.*?)\*\*/g);
+                                        return (
+                                            <p key={i} className={i > 0 ? 'mt-1' : ''}>
+                                                {parts.map((part, j) =>
+                                                    j % 2 === 1 ? <strong key={j}>{part}</strong> : part
+                                                )}
+                                            </p>
+                                        );
+                                    })}
+                                </div>
+                                <p className="text-xs opacity-50 mt-2 text-right">
+                                    {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                 </p>
                             </div>
                         </div>
                     ))}
 
-                    {/* Typing Indicator */}
                     {isTyping && (
                         <div className="flex justify-start">
-                            <div className="bg-white/10 backdrop-blur-sm px-5 py-4 rounded-2xl rounded-tl-sm border border-white/10">
-                                <div className="flex items-center gap-2 text-purple-300 text-sm font-medium mb-2">
-                                    <span>🤖</span>
-                                    <span>AI Assistant</span>
-                                </div>
-                                <div className="flex gap-2">
-                                    <span className="w-2 h-2 bg-purple-400 rounded-full animate-bounce"></span>
-                                    <span className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></span>
-                                    <span className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></span>
+                            <div className="bg-white/10 backdrop-blur-md text-white rounded-2xl rounded-bl-md border border-white/10 px-4 py-3">
+                                <div className="flex gap-1">
+                                    <span className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                                    <span className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                                    <span className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
                                 </div>
                             </div>
                         </div>
@@ -177,50 +198,33 @@ Assistant:`;
                     <div ref={messagesEndRef} />
                 </div>
 
-                {/* Quick Prompts */}
-                {messages.length <= 2 && (
-                    <div className="mb-4">
-                        <p className="text-gray-400 text-sm mb-3">Quick prompts:</p>
-                        <div className="flex flex-wrap gap-2">
-                            {quickPrompts.map((prompt, index) => (
-                                <button
-                                    key={index}
-                                    onClick={() => handleSendMessage(prompt)}
-                                    className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white text-sm rounded-full border border-white/20 transition-colors"
-                                >
-                                    {prompt}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-                )}
-
                 {/* Input Area */}
-                <div className="bg-white/10 backdrop-blur-sm rounded-2xl border border-white/20 p-3">
-                    <div className="flex gap-3">
-                        <textarea
+                <div className="bg-white/10 backdrop-blur-md border-t border-white/10 px-4 py-4">
+                    <div className="flex gap-2 sm:gap-3">
+                        <input
                             ref={inputRef}
+                            type="text"
                             value={inputValue}
                             onChange={(e) => setInputValue(e.target.value)}
                             onKeyPress={handleKeyPress}
-                            placeholder="Ask me anything about your job search..."
-                            rows={1}
-                            className="flex-1 px-4 py-3 bg-white/10 text-white rounded-xl border border-white/20 focus:outline-none focus:ring-2 focus:ring-purple-500 placeholder-gray-400 resize-none"
-                            style={{ minHeight: '48px', maxHeight: '120px' }}
+                            placeholder="Ask me anything about your career..."
+                            className="flex-1 px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:border-purple-500 text-sm sm:text-base"
                         />
                         <button
-                            onClick={() => handleSendMessage()}
+                            onClick={() => handleSend()}
                             disabled={!inputValue.trim() || isTyping}
-                            className="px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white font-medium rounded-xl hover:from-purple-600 hover:to-pink-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2"
+                            className={`px-4 sm:px-6 py-3 rounded-xl font-semibold transition-all ${inputValue.trim() && !isTyping
+                                    ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600'
+                                    : 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                                }`}
                         >
-                            <span>Send</span>
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
                             </svg>
                         </button>
                     </div>
-                    <p className="text-center text-gray-500 text-xs mt-2">
-                        Press Enter to send • Shift+Enter for new line
+                    <p className="text-gray-500 text-xs mt-2 text-center">
+                        AI responses are for guidance only. Always verify important information.
                     </p>
                 </div>
             </div>

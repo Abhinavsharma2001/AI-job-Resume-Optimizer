@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import { useAuth } from '../context/AuthContext';
 import { fetchAllJobs, SOURCE_COLORS } from '../services/jobsApi';
+import { saveJob, unsaveJob, isJobSaved, trackApplication } from '../services/userJobsService';
 
 const LiveJobListings = () => {
+    const { user, isAuthenticated } = useAuth();
     const [jobs, setJobs] = useState([]);
     const [sources, setSources] = useState({});
     const [loading, setLoading] = useState(true);
@@ -9,6 +12,8 @@ const LiveJobListings = () => {
     const [searchTerm, setSearchTerm] = useState('developer');
     const [inputValue, setInputValue] = useState('developer');
     const [activeSource, setActiveSource] = useState('all');
+    const [savedJobIds, setSavedJobIds] = useState(new Set());
+    const [savingJob, setSavingJob] = useState(null);
 
     const loadJobs = async (term, source) => {
         setLoading(true);
@@ -33,6 +38,42 @@ const LiveJobListings = () => {
         setSearchTerm(inputValue);
     };
 
+    const handleSaveJob = async (job) => {
+        if (!isAuthenticated) {
+            alert('Please login to save jobs');
+            return;
+        }
+        setSavingJob(job.id);
+        try {
+            if (savedJobIds.has(job.id)) {
+                await unsaveJob(user.uid, job.id);
+                setSavedJobIds(prev => {
+                    const next = new Set(prev);
+                    next.delete(job.id);
+                    return next;
+                });
+            } else {
+                await saveJob(user.uid, job);
+                setSavedJobIds(prev => new Set(prev).add(job.id));
+            }
+        } catch (error) {
+            console.error('Error saving job:', error);
+        } finally {
+            setSavingJob(null);
+        }
+    };
+
+    const handleApply = async (job) => {
+        if (isAuthenticated && user?.uid) {
+            try {
+                await trackApplication(user.uid, job, 'applied');
+            } catch (error) {
+                console.error('Error tracking application:', error);
+            }
+        }
+        window.open(job.applyUrl, '_blank');
+    };
+
     const sourceTabs = [
         { id: 'all', label: 'All', icon: '🌐' },
         { id: 'linkedin', label: 'LinkedIn', icon: '💼' },
@@ -51,7 +92,7 @@ const LiveJobListings = () => {
                             🔴 LIVE
                         </span>
                         <span className="inline-block px-3 py-1 bg-gradient-to-r from-blue-500 to-purple-600 text-white text-xs sm:text-sm font-semibold rounded-full">
-                            Multi-Source
+                            Real Jobs
                         </span>
                     </div>
                     <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white mb-2">
@@ -84,7 +125,7 @@ const LiveJobListings = () => {
                     </div>
                 </form>
 
-                {/* Source Tabs - Scrollable on mobile */}
+                {/* Source Tabs */}
                 <div className="mb-6 px-2 overflow-x-auto scrollbar-thin">
                     <div className="flex gap-2 min-w-max pb-2 justify-start sm:justify-center">
                         {sourceTabs.map((tab) => (
@@ -116,7 +157,7 @@ const LiveJobListings = () => {
                             <div className="absolute inset-0 border-4 border-purple-400/30 rounded-full"></div>
                             <div className="absolute inset-0 border-4 border-transparent border-t-purple-500 rounded-full animate-spin"></div>
                         </div>
-                        <p className="text-gray-300 text-sm sm:text-base mt-4">Fetching jobs...</p>
+                        <p className="text-gray-300 text-sm sm:text-base mt-4">Fetching live jobs...</p>
                     </div>
                 )}
 
@@ -138,7 +179,15 @@ const LiveJobListings = () => {
                         </p>
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 px-2">
                             {jobs.map((job) => (
-                                <JobCard key={job.id} job={job} />
+                                <JobCard
+                                    key={job.id}
+                                    job={job}
+                                    isSaved={savedJobIds.has(job.id)}
+                                    isSaving={savingJob === job.id}
+                                    onSave={() => handleSaveJob(job)}
+                                    onApply={() => handleApply(job)}
+                                    isAuthenticated={isAuthenticated}
+                                />
                             ))}
                         </div>
                     </>
@@ -156,8 +205,8 @@ const LiveJobListings = () => {
     );
 };
 
-// Job Card Component - Mobile Optimized
-const JobCard = ({ job }) => {
+// Job Card Component with Save/Apply functionality
+const JobCard = ({ job, isSaved, isSaving, onSave, onApply, isAuthenticated }) => {
     const sourceStyle = SOURCE_COLORS[job.source] || SOURCE_COLORS.indeed;
 
     return (
@@ -167,7 +216,20 @@ const JobCard = ({ job }) => {
                 <span className="text-white text-xs sm:text-sm font-medium flex items-center gap-1.5">
                     <span>{sourceStyle.icon}</span> {job.sourceLabel}
                 </span>
-                <span className="text-white/80 text-xs">{job.type}</span>
+                <div className="flex items-center gap-2">
+                    <span className="text-white/80 text-xs">{job.type}</span>
+                    <button
+                        onClick={onSave}
+                        disabled={isSaving}
+                        className={`p-1 rounded-full transition-all ${isSaved
+                                ? 'bg-white/20 text-yellow-300'
+                                : 'hover:bg-white/20 text-white/70 hover:text-white'
+                            }`}
+                        title={isSaved ? 'Remove from saved' : 'Save job'}
+                    >
+                        {isSaving ? '...' : (isSaved ? '⭐' : '☆')}
+                    </button>
+                </div>
             </div>
 
             <div className="p-4 sm:p-5">
@@ -197,7 +259,7 @@ const JobCard = ({ job }) => {
                     {job.title}
                 </h3>
 
-                {/* Description - Hidden on small screens */}
+                {/* Description */}
                 <p className="hidden sm:block text-gray-400 text-sm mb-3 line-clamp-2">
                     {job.description}
                 </p>
@@ -207,15 +269,20 @@ const JobCard = ({ job }) => {
                     💰 {job.salary}
                 </div>
 
-                {/* Apply Button */}
-                <a
-                    href={job.applyUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={`block w-full py-2.5 sm:py-3 ${sourceStyle.bg} text-white text-center font-semibold rounded-lg sm:rounded-xl hover:opacity-90 transition-all text-sm sm:text-base`}
-                >
-                    Apply on {job.sourceLabel} →
-                </a>
+                {/* Action Buttons */}
+                <div className="flex gap-2">
+                    <button
+                        onClick={onApply}
+                        className={`flex-1 py-2.5 sm:py-3 ${sourceStyle.bg} text-white text-center font-semibold rounded-lg sm:rounded-xl hover:opacity-90 transition-all text-sm sm:text-base`}
+                    >
+                        Apply Now →
+                    </button>
+                </div>
+                {isAuthenticated && (
+                    <p className="text-center text-gray-500 text-xs mt-2">
+                        ✓ Application will be tracked
+                    </p>
+                )}
             </div>
         </div>
     );
